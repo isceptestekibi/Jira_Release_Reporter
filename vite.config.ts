@@ -7,5 +7,5 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  base: '/Jira-Release-Reporter/', // GitHub Pages için gerekli
+  base: '/Jira_Release_Reporter/', // GitHub Pages için gerekli
 });

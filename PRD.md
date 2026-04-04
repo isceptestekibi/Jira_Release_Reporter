@@ -1,68 +1,65 @@
 # Ürün Gereksinimleri Belgesi (PRD) - Jira Release Reporter
 
-## 1. Ürün Özeti
-**Jira Release Reporter**, Jira üzerinden dışa aktarılan (export) karmaşık yayın/onay (release) kayıtlarının (HTML veya Excel formatlarında) otomatik olarak ayrıştırılarak kurumsal standartlara uygun, temiz, okunabilir ve hızlıca paylaşılabilir Sürüm Notları (Release Notes) formatına dönüştürülmesini sağlayan web tabanlı, statik bir Frontend (Vite + React) uygulamasıdır.
+*(Yeni Kurumsal Organizasyon: isceptestekibi)*
 
-## 2. Kullanıcı Hedefi ve Problemler
-Ekiplerin Jira üzerinden alınan listeleri manuel olarak düzenleyip e-postaya veya PDF'e dönüştürmesi büyük bir zaman kaybı ve hata riskidir. Bu uygulama;
-- Sürüm bilgilerini (Epic, Talepler, Bug kayıtları) otomatik kategorize eder.
-- Kayıtların platformlarını (iOS/Android vb.) otomatik tespit eder.
-- Mail (Örn: Outlook) dostu tablo sistemleri üretir.
-- Tarihsel filtreleme sayesinde (örneğin önceki bir pakette gönderilen gelişmeleri) ayırır ve farklı bir renkte (gri/soluk) vurgulayarak mükerrer test/kontrol eforunu engeller.
-- Kritik alanların rapor üzerinden doğrudan düzenlenmesine olanak sunar.
+## 1. Uygulama Ne İşe Yarar? (Ürün Özeti)
+**Jira Release Reporter**, Jira'dan dışa aktarılan (HTML veya Excel formatlı) karmaşık issue listelerini anında okunabilir, kurumsal şablona uygun ve Outlook/Mac Mail ile uyumlu **Sürüm Notları (Release Notes)** formatına dönüştürür.
 
-## 3. Temel Özellikler (Mevcut Durum - v2.5.2)
-Aşağıdaki fonksiyonel gereksinimler hâlihazırda uygulamada çalışır durumdadır:
+Ekibin raporları manuel oluşturma, kopyala-yapıştır yapma ve platform/ID tespit etme gibi el yordamıyla yaptığı işleri otomatikleştirerek zaman kazandırır ve hata riskini sıfırlar.
 
-### 3.1. Veri Yükleme ve Akıllı Ayrıştırma (Parsing)
-- **Çoklu Format Desteği:** Jira'dan alınan hem `HTML` hem de `Excel (.xls, .xlsx)` dosyalarını kabul edip okuyabilir.
-- **Kategori Ayrımı:**
-  - **Talepler (Story/Task/Sub-task):** \"Bug\" sınıfında olmayan ve \"CCRSP\" ID'sine sahip kayıtlarla birlikte, Task ve Sub-task türleri (CCRSP numarası olmasa dahi tire `-` atanarak) \"Talepler\" tablosuna aktarılır.
-  - **Tamamlanan Kayıtlar (Bugs):** Issue Type \"Bug\" olanlar veya etiket/açıklama metninde `\"external\"` veya `\"accessibilitybug\"` barındıran veya dış sistem (Örn: ISCEPEXTRC) bağlantısı bulunan kayıtlar otomatik olarak süzülüp hata çözümleri listesinde yer alır.
-- **Akıllı Backlog ve Defect ID Taraması:** Karmaşık metin hücreleri arasından Regex ile doğru \"CCRSP\" veya \"ISCEPEXTRC / ISCOREXT\" referansları tespit edilir. Tüm tablolarda öncelik \"CCRSP\" numarasına aittir; yoksa \"ISCEPEXTRC/ISCOREXT\"; hiçbiri yoksa \"-\" gösterilir.
-- **Epic Birleştirme:** Aynı \"Epic Name\" altındaki bağıntılı talepler, tabloda `rowSpan` yapılarak tekil ve temiz biçimde birleştirilir.
-- **Platform Tespit Sistemi:** Orijinal bilet kodlarındaki (örn: ISCEPANDROID, ISCEPIPHONE) ifadelere bakılarak platform (iOS / Android) otomatik tespit edilir.
-- **Release Notes Ayrıştırma:** Jira'daki `customfield_10082` (Release Notes) veya "Sürüm Notu" (Case-insensitive) alanı, HTML ve Excel exportlarında otomatik okunur. `#` ile başlayan teknik alt detaylar filtrelenir; geçerli notlar Kısım B'ye aktarılır.
+## 2. Sistem Nasıl Çalışır ve Verileri Nasıl Sınıflandırır?
+Ekibin bilmesi gereken en temel "veriyi nasıl okuyoruz?" kuralları aşağıdaki gibidir:
 
-### 3.2. Arayüz ve UI/UX Davranışları
-- **Filtreleme & Uyarı Mekanizması:** \"Tarih Bazlı Filtrele\" ile o tarihten önce çözülmüş taskların arka planı soluk gri yapılır.
-- **Akıllı Uyarı Ekranları (Modals):** Filtre girilmeden dışa aktarım istendiğinde doğrulama pop-up'ı gösterilir.
-- **Bildirimler:** Başarı/hata bildirimleri gösterilir, sayfa başına otomatik kaydırma yapılır.
-- **Düzenlenebilir (Editable) Rapor Alanları:** Oluşturulan raporda belirli alanlar, tablo formatını ve ölçülerini bozmadan doğrudan düzenlenebilir:
-  - **Sürüm Bilgisi (Kısım A):** Sürüm numarası tıklanarak değiştirilebilir.
-  - **Tamamlanan Kayıtlar – Açıklama:** Her hata kaydının açıklaması satır satır düzenlenebilir.
-  - **Belirtilmesi Gerekenler (Kısım B):** Jira Release Notes'tan otomatik doldurulur (bold özet + normal açıklama formatında). İçerik serbestçe düzenlenebilir.
-  - **Bilinen Durumlar (Kısım B):** Boş olarak gelir, kullanıcı serbest metin girebilir.
-  - **Paket URL Notu (Kısım C):** Varsayılan uyarı metni ile gelir (`Paket linkini ekle ve paketi BETA'lamayı...`), düzenlenebilir, mavi-italik stilinde gösterilir.
+### A. Talepler (Story & Task) Nasıl Belirlenir?
+- **Kimler Buraya Girer?** Kayıt türü "Bug" olmayan tüm işler (Story, Task, vb.).
+- **Nasıl Gösterilir?** Talebin bir CCRSP numarası varsa o numara Tabloya yazılır. Yoksa "-" işareti konularak "Talepler" tablosuna eklenir.
 
-### 3.3. Belirtilmesi Gerekenler – Release Notes Entegrasyonu
-- Dosya yüklendiğinde, Jira'dan gelen ve `None` veya boş olmayan Release Notes değerleri otomatik olarak ayrıştırılır.
-- `#` ile başlayan teknik iç notlar (test adımları, sub-bullet'lar) filtrelenerek dışarıda bırakılır.
-- Her kayıt şu formatta listelenir: **`• [Task Açıklaması]`** `: [Release Notes]` (Summary **kalın**, açıklama normal)
-- Alan `contentEditable` div olarak render edilir — kullanıcı otomatik gelen içeriği düzenleyebilir veya silip sıfırdan yazabilir.
-- Bu içerik hem PDF'e hem Mail Kopyası'na yansır.
+### B. Hatalar (Bugs) Nasıl Belirlenir ve Seçilir?
+- **Kimler Buraya Girer?**
+  1. Jira'da Issue Type'ı (Kayıt Türü) "Bug" olanlar.
+  2. İçinde/Etiketinde `external` veya `accessibilitybug` geçenler.
+  3. Dış sistem (Örnek: `ISCEPEXTRC`) bağlantısı olanlar.
+- **Hata (Defect) ID Nasıl Atanır?** (En Önemli Kural)
+  1. Sistem metin içinde **"CCRSP"** arar. Varsa, Hata ID'yi bu yapar ve tablodaki başlığı da otomatik olarak o CCRSP'nin kendi başlığı ile günceller (Çapraz eşleşme).
+  2. CCRSP bulamazsa, metindeki **"ISCEPEXTRC"** veya **"ISCOREXT"** numarasını bulur ve ID olarak bunu atar.
+  3. Hiçbiri yoksa ID hücresine "-" yazar.
 
-### 3.4. Dışa Aktarım (Export) Modülleri
-- **PDF İndir (html2pdf):** Sayfanın anlık UI görüntüsünü A4 formatlı PDF belgesine dönüştürür. Editable alanlardaki son hali PDF'e yansır.
-- **Mail İçin Kopyala:** MS Outlook ve Mac Mail'de bozuma uğramayan özel HTML formatında panoya kopyalar. Editable alanlardaki (Sürüm, Açıklamalar, Belirtilmesi Gerekenler, Bilinen Durumlar, Paket URL) tüm düzenlemeler mail kopyasına yansır.
+### C. Geliştirme Platformu (iOS / Android) Nasıl Bulunur?
+- Bilet numarasındaki isme (Örneğin: `ISCEPANDROID-1234` veya `ISCEPIPHONE-5678`) bakılır. "ANDROID" veya "IPHONE" geçmesine göre platform sütununa otomatik "iOS" veya "Android" yazılır.
 
-## 4. Versiyon Geçmişi (Özet)
-| Versiyon | Tarih | Değişiklik |
-|---|---|---|
-| v2.3.2 | 13.03.2026 | ID öncelik sırası (CCRSP > ISCEPEXTRC > -) |
-| v2.4.0 | 17.03.2026 | Sürüm bilgisi ve Paket URL editable yapıldı |
-| v2.5.0 | 18.03.2026 | Release Notes ayrıştırma + Belirtilmesi Gerekenler otomatik doldurma |
-| v2.5.1 | 18.03.2026 | `#` satır filtresi eklendi |
-| v2.5.2 | 18.03.2026 | Bold summary formatı, Bilinen Durumlar editable, PRD güncellendi |
-| v2.5.3 | 28.03.2026 | Dify workflow fix, AI tool fixes |
-| v2.5.4 | 01.04.2026 | Release Notes içerisindeki liste (bullet) ve formatlama yapılarının birebir (HTML tag olarak) korunarak rapora (ve e-postaya) yansıması sağlandı |
-| v2.5.5 | 03.04.2026 | Dışa aktarılan listede bulunan "Bug" ve eşleştiği "CCRSP" var ise; hata özetinin otomatik olarak CCRSP'nin kendi başlığı (summary) ile ezilmesi (çapraz eşleşme) kurgulandı |
-| v2.5.6 | 03.04.2026 | Tamamlanan kayıtlarda anahtar/ID önceliği kesinleştirildi: ISCEPIPHONE/ISCEPANDROID vb. biletlerin içinde CCRSP varsa 'Defect ID' olarak o kullanılır; yoksa ISCEPEXTRC/ISCOREXT; ikisi de yoksa '-' setlenir. |
-| v2.5.7 | 03.04.2026 | Tamamlanan kayıtlar açıklaması satıra sığmama sorunu word-wrap ile çözüldü. CCRSP başlığı tablodan eşleşmese bile artık hücredeki metin (html/excel) üzerinden zorla süzülüp alınabiliyor. |
-| v2.5.8 | 03.04.2026 | Giriş sayfasındaki bilgilendirme metinleri güncellendi (Jira filter sayfalarından Export/HTML report - filter fields formatı için uyarı eklendi, uzantı uyarıları kaldırıldı). Uygulama Prod ortamına deploy edildi. |
-| v2.5.9 | 03.04.2026 | React 19 contentEditable state crash (beyaz ekran) problemi auto-resizing textarea componenti kullanılarak çözüldü. |
+### D. Destanlar (Epic) Nasıl Gruplanır?
+- Jira listesindeki "Epic Name" alanlarına bakılır. Aynı Epic altındaki kayıtlar tespit edilir ve tabloda ortak bir ana başlık altında birleştirilir. Tablo sade bir görünüme kavuşur.
 
----
-*(Kural: Bu doküman, uygulamada yapılan her teknik, fonksiyonel ve süreç bazlı değişiklikte tıpkı versiyon dosyası gibi otomatik olarak güncellenecektir.)*
-<br/>
-**Son Güncelleme:** v2.5.9 - 03.04.2026
+### E. Ekrandaki Sürüm Notları (Belirtilmesi Gerekenler) Nasıl Doldurulur?
+- **Nereden Okunur?** Jira'daki hesaplanan alanlardan (Örn: `customfield_10082` veya "Sürüm Notu" kolonu).
+- **Teknik Veriyi Temizleme:** Başında `#` işareti olan tüm maddeler "teknik geliştirici/test notu" olarak algılanır ve Sürüm Notu listesine eklenmez, filtrelenir (silinir).
+- Rapora, Task özeti koyu (bold), Sürüm Notu ise normal yazı tipiyle yansıtılır. Gerekirse rapor ekranından manuel olarak silinebilir/düzenlenebilir.
+
+## 3. Ekran Özellikleri ve Kullanım Kolaylıkları
+
+- **Daha Önce Çözülmüş İşleri Gizleme (Tarih Filtresi):** Arayüzde bir tarih seçildiğinde, o tarihten önce tamamlanmış (Resolved) olan işler soluk/gri renkte gösterilir. Bu eklenti, ekibin daha önce test edip kapattığı işler için tekrar tekrar test eforu harcamasını engeller.
+- **Ekranda Düzenleme (Editable Alanlar):** Liste oluşturulduktan sonra bile her yere müdahale edebilirsiniz! Ekrandaki aşağıdaki alanlara tıklayıp klavyeden düzeltebilirsiniz:
+  - Sürüm Numarası (Kısım A)
+  - Tüm hata açıklamaları satırları (textarea ile güvenli düzenleme)
+  - Belirtilmesi Gerekenler notları
+  - Bilinen Durumlar (Manuel yazı ekleyebilirsiniz)
+  - Paket Linkini belirten uyarı metni
+
+## 4. Raporu Dışa Aktarma (Export) Seçenekleri
+
+- **Mail İçin Kopyala:** Tıkladığınızda, ekrandaki her şeyi renk, tablo genişliği ve formatı bozulmadan belleğe kopyalar. Outlook veya Mac Mail'e "Yapıştır" (Cmd+V / Ctrl+V) dediğinizde mükemmel görünür.
+- **PDF İndir:** Sayfayı anlık renkleri ve görselleriyle birlikte ekibe veya yönetime sunulabilecek derli toplu bir A4/PDF çıktısı olarak kaydeder.
+
+## 5. Proje Ortamı & Versiyonlar
+
+*Proje kodları GitHub üzerinde `isceptestekibi/Jira_Release_Reporter` reposunda tutulmaktadır.*
+**Canlı Uygulama Adresi:** [https://isceptestekibi.github.io/Jira_Release_Reporter/](https://isceptestekibi.github.io/Jira_Release_Reporter/)
+
+**Son Versiyon Geçmişi:**
+- **v2.5.0 - v2.5.2:** Release Notes (Sürüm notu) kolonundan otomatik doldurma yeteneği ve teknik notları (`#`) silme özelliği geliştirildi. Bilinen durumlar editable yapıldı.
+- **v2.5.3 - v2.5.4:** HTML tag'leri ve liste/bullet yapıları korunarak rapora yansıma sağlandı.
+- **v2.5.5 - v2.5.7:** En önemli eşleşme kuralları eklendi: CCRSP ID ataması netleştirildi, hata başlığının doğrudan CCRSP özetiyle üstüne yazdırılması yeteneği kazandırıldı. Satıra sığmama sorunları word-wrap ile giderildi.
+- **v2.5.8:** Arayüze "Filter export alınmalı" yönlendirme uyarıları eklendi.
+- **v2.5.9:** Rapor alanına tıklandığında uygulamanın çökmesi (React 19 white-screen) engellendi, satır içi metin düzenleme kutuları (auto-resizing textarea) güvenli hale getirildi.
+- **v2.6.0:** Github organizasyon taşınması gerçekleştirildi (`isceptestekibi`). PRD dokümanı tüm ekipler için daha sade ve anlaşılan kurallar rehberi olarak yeniden yazıldı.
+- **v2.6.1 (Güncel):** "Change Request" ve türevi olan `Bug` dışındaki tüm kayıtların, bağlantılı CCRSP'si olmasa dahi "Talepler" tablosunda (`-` şeklinde) eksiksiz yer alması kuralı eklendi. Bilgilendirme ikon metninin turuncu CSS sınıfı güncellendi ve Vite altyapısı yeni repo url formatı (`/Jira_Release_Reporter/`) ile uyumlu hale getirildi.

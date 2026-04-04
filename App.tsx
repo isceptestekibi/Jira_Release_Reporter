@@ -129,9 +129,9 @@ const App: React.FC = () => {
       const isBug = t.issueType.toLowerCase() === 'bug';
       if (isBug) return false;
 
-      const isTask = t.issueType.toLowerCase().includes('task');
-      // Sadece CCRSP'si olan talepler veya Task tipleri işleme alınsın
-      return t.backlogId !== '-' || isTask;
+      // Bug olmayan tüm kayıtlar (Story, Task, Change Request vb.) Talepler sekmesinde yer almalıdır.
+      // CCRSP veya diğer bağlantıları yoksa bile tabloya '-' olarak yansıyacak.
+      return true;
     });
   }, [filteredTasks]);
 
@@ -624,7 +624,7 @@ const App: React.FC = () => {
                         <td style={{ border: 'none', width: '24px', paddingRight: '4px', verticalAlign: 'middle' }}>
                           <div style={{ width: '16px', height: '16px', border: '1.5px solid #ea580c', borderRadius: '50%', textAlign: 'center', color: '#ea580c', fontSize: '10px', fontWeight: 'bold', fontStyle: 'normal', lineHeight: '14px' }}>i</div>
                         </td>
-                        <td style={{ border: 'none', color: '#ea580c', fontWeight: 'bold', fontStyle: 'italic', fontSize: '12.5px', padding: '0', verticalAlign: 'middle' }}>Aşağıda testi yeni tamamlanan kayıtlar beyaz , önceki paketler ile iletilmiş olanlar gri olarak belirtilmiştir.</td>
+                        <td className="text-orange-info" style={{ border: 'none', color: '#ea580c', fontWeight: 'bold', fontStyle: 'italic', fontSize: '12.5px', padding: '0', verticalAlign: 'middle' }}>Aşağıda testi yeni tamamlanan kayıtlar beyaz , önceki paketler ile iletilmiş olanlar gri olarak belirtilmiştir.</td>
                       </tr>
                     </table>
                   </div>

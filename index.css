@@ -59,6 +59,10 @@ body {
     background-color: #ffffff !important;
 }
 
+#pdf-root .text-orange-info {
+    color: #ea580c !important;
+}
+
 #pdf-root a {
     color: #0000ff !important;
     text-decoration: underline !important;
