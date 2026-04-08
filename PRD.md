@@ -62,7 +62,8 @@ Ekibin bilmesi gereken en temel "veriyi nasıl okuyoruz?" kuralları aşağıdak
 - **v2.5.8:** Arayüze "Filter export alınmalı" yönlendirme uyarıları eklendi.
 - **v2.5.9:** Rapor alanına tıklandığında uygulamanın çökmesi (React 19 white-screen) engellendi, satır içi metin düzenleme kutuları (auto-resizing textarea) güvenli hale getirildi.
 - **v2.6.0:** Github organizasyon taşınması gerçekleştirildi (`isceptestekibi`). PRD dokümanı tüm ekipler için daha sade ve anlaşılan kurallar rehberi olarak yeniden yazıldı.
-- **v2.6.1 (Güncel):** "Change Request" ve türevi olan `Bug` dışındaki tüm kayıtların, bağlantılı CCRSP'si olmasa dahi "Talepler" tablosunda (`-` şeklinde) eksiksiz yer alması kuralı eklendi. Bilgilendirme ikon metninin turuncu CSS sınıfı güncellendi ve Vite altyapısı yeni repo url formatı (`/Jira_Release_Reporter/`) ile uyumlu hale getirildi.
+- **v2.6.1:** "Change Request" ve türevi olan `Bug` dışındaki tüm kayıtların, bağlantılı CCRSP'si olmasa dahi "Talepler" tablosunda (`-` şeklinde) eksiksiz yer alması kuralı eklendi. Bilgilendirme ikon metninin turuncu CSS sınıfı güncellendi ve Vite altyapısı yeni repo url formatı (`/Jira_Release_Reporter/`) ile uyumlu hale getirildi.
+- **v2.6.2 (Güncel):** Jira filtre ekranında Export butonunun kaybolması ihtimaline karşı arayüze ve PRD dokümanına doğrudan CSV indirme bağlantıları bilgilendirmesi eklendi.
 
 ## 6. Referans JQL Filtreleri
 
@@ -87,3 +88,11 @@ OR (  issuetype = Bug  AND labels IN
 AND assignee in ( 62f0f407da8620d533941d49, 6079e03c53cc020069bdb56a, 62f0f38e1323922c61e357ea , 712020:83d9fe14-ecf6-4562-ae39-9a8d58f1d10e,712020:9bbadc7a-ce11-4ba2-9aa1-3a27a59ff9a1,712020:5a789138-8ec9-46a4-b5af-d386c54d614a, 712020:ead50a8a-bd09-4280-a3b3-2895160ae799,712020:21df12ad-c2b9-4d78-ab19-6ec5c1bae8fe,712020:081e7c39-2f27-4707-b312-a4316617d9fa,5b6834dfee2c923be1c74957)
 ORDER BY statusCategoryChangedDate DESC, fixVersion ASC, updated DESC, issuetype DESC
 ```
+
+### Alternatif: Doğrudan CSV İndirme Bağlantıları
+
+Bazen Jira filtre ekranlarında dışa aktarma (Export) butonu geçici olarak kaybolabilmektedir. Bu durumda HTML yerine doğrudan tüm alanları içeren CSV formatında indirme yapabilmeniz için aşağıdaki acil durum kısayollarını kullanabilirsiniz. 
+*(Not: İndirme hatası gelirse açılan Jira sayfasındaki "Retry Operation" butonuna tıklayarak CSV indirmesini zorlayabilirsiniz.)*
+
+- **ANDROID CSV Export Linki:** [İndir (filter=18441)](https://commencis.atlassian.net/sr/jira.issueviews:searchrequest-csv-all-fields/temp/SearchRequest.csv?jqlQuery=filter=18441)
+- **IOS CSV Export Linki:** [İndir (filter=18442)](https://commencis.atlassian.net/sr/jira.issueviews:searchrequest-csv-all-fields/temp/SearchRequest.csv?jqlQuery=filter=18442)

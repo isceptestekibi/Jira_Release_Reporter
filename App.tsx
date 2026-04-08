@@ -8,7 +8,8 @@ import {
   MonitorSmartphone,
   UploadCloud,
   RotateCcw,
-  FileDown
+  FileDown,
+  Info
 } from 'lucide-react';
 import { parseJiraExcel } from './services/excelParser';
 import { parseJiraHtml } from './services/htmlParser';
@@ -562,6 +563,28 @@ const App: React.FC = () => {
               </div>
               <input type="file" accept=".xlsx,.xls,.csv,.html,.htm" onChange={handleFileUpload} className="hidden" />
             </label>
+
+            <div className="mt-8 text-left bg-blue-50/50 border border-blue-100 p-4 rounded-lg max-w-xl mx-auto shadow-sm text-sm text-slate-600">
+              <div className="flex items-start gap-3">
+                <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-slate-700 mb-1">
+                    Eğer jira filtre sayfalarında <span className="font-bold">export</span> butonuna erişilemez ise aşağıdaki CSV indirme URL'leri ile dosyalar indirilebilir ve bunlar üzerinden devam edilebilir.
+                  </p>
+                  <p className="text-xs text-slate-500 mb-3">(İndirme hatası gelirse "Retry Operation" butonu tıklanarak csv'ler indirilebiliyor.)</p>
+                  <div className="flex flex-col gap-2">
+                    <a href="https://commencis.atlassian.net/sr/jira.issueviews:searchrequest-csv-all-fields/temp/SearchRequest.csv?jqlQuery=filter=18442" target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:bg-blue-100 p-2 rounded transition-colors text-blue-700 font-medium bg-blue-50">
+                      <Smartphone className="w-4 h-4" />
+                      AND: CSV İndir
+                    </a>
+                    <a href="https://commencis.atlassian.net/sr/jira.issueviews:searchrequest-csv-all-fields/temp/SearchRequest.csv?jqlQuery=filter=18442" target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:bg-blue-100 p-2 rounded transition-colors text-blue-700 font-medium bg-blue-50">
+                      <MonitorSmartphone className="w-4 h-4" />
+                      IOS: CSV İndir
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
             {status === ReportStatus.ERROR && error && (
               <div className="mt-6 bg-red-50 p-4 rounded-lg border border-red-200 text-red-800 font-medium">
                 {error}
