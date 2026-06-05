@@ -64,7 +64,8 @@ Ekibin bilmesi gereken en temel "veriyi nasıl okuyoruz?" kuralları aşağıdak
 - **v2.6.0:** Github organizasyon taşınması gerçekleştirildi (`isceptestekibi`). PRD dokümanı tüm ekipler için daha sade ve anlaşılan kurallar rehberi olarak yeniden yazıldı.
 - **v2.6.1:** "Change Request" ve türevi olan `Bug` dışındaki tüm kayıtların, bağlantılı CCRSP'si olmasa dahi "Talepler" tablosunda (`-` şeklinde) eksiksiz yer alması kuralı eklendi. Bilgilendirme ikon metninin turuncu CSS sınıfı güncellendi ve Vite altyapısı yeni repo url formatı (`/Jira_Release_Reporter/`) ile uyumlu hale getirildi.
 - **v2.6.2:** Jira filtre ekranında Export butonunun kaybolması ihtimaline karşı arayüze ve PRD dokümanına doğrudan CSV indirme bağlantıları bilgilendirmesi eklendi.
-- **v2.6.3 (Güncel):** Excel ve CSV yüklemelerinde, biletlerin içindeki Android ilişiği/bağlantısı (relates) nedeniyle platformun yanlışlıkla ANDROID olarak tespit edilmesi hatası giderildi. `Issue key` ve `Key` alanları `originalKey` atamasında önceliklendirildi.
+- **v2.6.3:** Excel ve CSV yüklemelerinde, biletlerin içindeki Android ilişiği/bağlantısı (relates) nedeniyle platformun yanlışlıkla ANDROID olarak tespit edilmesi hatası giderildi. `Issue key` ve `Key` alanları `originalKey` atamasında önceliklendirildi.
+- **v2.6.4 (Güncel):** Versiyon ve tarih etiketlerinin derleme/dağıtım öncesi güncellenmesi kuralı PRD dokümanına eklendi ve sürüm numarası güncellendi.
 
 ## 6. Referans JQL Filtreleri
 
@@ -97,3 +98,21 @@ Bazen Jira filtre ekranlarında dışa aktarma (Export) butonu geçici olarak ka
 
 - **ANDROID CSV Export Linki:** [İndir (filter=18441)](https://commencis.atlassian.net/sr/jira.issueviews:searchrequest-csv-all-fields/temp/SearchRequest.csv?jqlQuery=filter=18441)
 - **IOS CSV Export Linki:** [İndir (filter=18442)](https://commencis.atlassian.net/sr/jira.issueviews:searchrequest-csv-all-fields/temp/SearchRequest.csv?jqlQuery=filter=18442)
+
+## 7. Canlıya Dağıtım (Deployment) ve Versiyonlama Kılavuzu
+
+Uygulamada herhangi bir geliştirme veya hata giderme yapıldıktan sonra canlıya çıkış öncesinde aşağıdaki adımların eksiksiz olarak yapılması zorunludur:
+
+1. **Versiyon ve Tarih Değerlerinin Güncellenmesi**:
+   - `version.ts` dosyası içindeki `APP_VERSION` (örn: `2.6.4`) ve `APP_DATE` (örn: `05062026`) değişkenleri güncellenmelidir.
+   - Bu değerler uygulama arayüzünün sağ alt köşesinde yer alan versiyon etiketine otomatik olarak yansıtılmaktadır.
+
+2. **PRD (Ürün Gereksinimleri Belgesi) Güncellenmesi**:
+   - `PRD.md` dosyasındaki "5. Proje Ortamı & Versiyonlar" kısmına yeni sürüm maddesi eklenmeli ve `(Güncel)` ibaresi en son sürümün yanına konulmalıdır.
+
+3. **Yerel Derleme (Build) ve Test Kontrolü**:
+   - Değişikliklerin hatasız şekilde paketlendiğini doğrulamak için `npm run build` komutu çalıştırılmalıdır.
+   - `npm run dev` ile yerel sunucu başlatılarak arayüzdeki sürüm etiketinin doğruluğu yerelde test edilmelidir.
+
+4. **Canlıya Dağıtım (Publish)**:
+   - Git commit ve push işlemlerinin ardından, `npm run deploy` komutu çalıştırılarak güncel derleme dosyaları GitHub Pages (`gh-pages`) dalına yüklenmelidir. Tarayıcı önbelleği temizlenerek canlıda test edilmelidir.
