@@ -63,7 +63,8 @@ Ekibin bilmesi gereken en temel "veriyi nasıl okuyoruz?" kuralları aşağıdak
 - **v2.5.9:** Rapor alanına tıklandığında uygulamanın çökmesi (React 19 white-screen) engellendi, satır içi metin düzenleme kutuları (auto-resizing textarea) güvenli hale getirildi.
 - **v2.6.0:** Github organizasyon taşınması gerçekleştirildi (`isceptestekibi`). PRD dokümanı tüm ekipler için daha sade ve anlaşılan kurallar rehberi olarak yeniden yazıldı.
 - **v2.6.1:** "Change Request" ve türevi olan `Bug` dışındaki tüm kayıtların, bağlantılı CCRSP'si olmasa dahi "Talepler" tablosunda (`-` şeklinde) eksiksiz yer alması kuralı eklendi. Bilgilendirme ikon metninin turuncu CSS sınıfı güncellendi ve Vite altyapısı yeni repo url formatı (`/Jira_Release_Reporter/`) ile uyumlu hale getirildi.
-- **v2.6.2 (Güncel):** Jira filtre ekranında Export butonunun kaybolması ihtimaline karşı arayüze ve PRD dokümanına doğrudan CSV indirme bağlantıları bilgilendirmesi eklendi.
+- **v2.6.2:** Jira filtre ekranında Export butonunun kaybolması ihtimaline karşı arayüze ve PRD dokümanına doğrudan CSV indirme bağlantıları bilgilendirmesi eklendi.
+- **v2.6.3 (Güncel):** Excel ve CSV yüklemelerinde, biletlerin içindeki Android ilişiği/bağlantısı (relates) nedeniyle platformun yanlışlıkla ANDROID olarak tespit edilmesi hatası giderildi. `Issue key` ve `Key` alanları `originalKey` atamasında önceliklendirildi.
 
 ## 6. Referans JQL Filtreleri
 

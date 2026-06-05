@@ -23,7 +23,7 @@ export const parseJiraExcel = async (file: File): Promise<JiraTask[]> => {
         const tasks: JiraTask[] = jsonData.map((row: any) => {
 
           // Original Key (e.g. ISCEPANDROID-1234)
-          const originalKey = cleanStr(row['Inward issue link (Relates)_1'] || row['Inward issue link (Relates)'] || row['Issue key'] || row['Key'] || 'N/A');
+          const originalKey = cleanStr(row['Issue key'] || row['Key'] || row['Inward issue link (Relates)_1'] || row['Inward issue link (Relates)'] || 'N/A');
 
           // Issue Type extraction
           const issueType = cleanStr(row['Issue Type'] || row['Issue type'] || row['Sorun Tipi'] || 'Story');
