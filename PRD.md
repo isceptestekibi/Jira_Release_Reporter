@@ -65,7 +65,17 @@ Ekibin bilmesi gereken en temel "veriyi nasıl okuyoruz?" kuralları aşağıdak
 - **v2.6.1:** "Change Request" ve türevi olan `Bug` dışındaki tüm kayıtların, bağlantılı CCRSP'si olmasa dahi "Talepler" tablosunda (`-` şeklinde) eksiksiz yer alması kuralı eklendi. Bilgilendirme ikon metninin turuncu CSS sınıfı güncellendi ve Vite altyapısı yeni repo url formatı (`/Jira_Release_Reporter/`) ile uyumlu hale getirildi.
 - **v2.6.2:** Jira filtre ekranında Export butonunun kaybolması ihtimaline karşı arayüze ve PRD dokümanına doğrudan CSV indirme bağlantıları bilgilendirmesi eklendi.
 - **v2.6.3:** Excel ve CSV yüklemelerinde, biletlerin içindeki Android ilişiği/bağlantısı (relates) nedeniyle platformun yanlışlıkla ANDROID olarak tespit edilmesi hatası giderildi. `Issue key` ve `Key` alanları `originalKey` atamasında önceliklendirildi.
-- **v2.6.4 (Güncel):** Versiyon ve tarih etiketlerinin derleme/dağıtım öncesi güncellenmesi kuralı PRD dokümanına eklendi ve sürüm numarası güncellendi.
+- **v2.6.4:** Versiyon ve tarih etiketlerinin derleme/dağıtım öncesi güncellenmesi kuralı PRD dokümanına eklendi ve sürüm numarası güncellendi.
+- **v2.7.1 (Güncel):** Rapor düzeni değişikliği — **Kısım B (Sürüm Detayları: Belirtilmesi Gerekenler + Bilinen Durumlar)** artık Talepler/Tamamlanan Kayıtlar tablolarının altında değil, **Kısım A'nın hemen altında, tabloların üstünde** yer alıyor. Böylece müşteri önce proje/paket bilgisini, ardından belirtilmesi gerekenleri, sonra task listelerini görüyor. Değişiklik hem ekran/PDF çıktısına hem de "Mail için Kopyala" çıktısına uygulandı.
+- **v2.7.0:** Doğruluk ve kararlılık düzeltmeleri:
+  - **Bug sınıflandırma hatası giderildi (kritik).** Kayıt satırının tamamında "bug" veya "external" kelimesi arandığı için, özetinde bu kelimeler geçen Story/Task kayıtları yanlışlıkla "Tamamlanan Kayıtlar" tablosuna düşüyordu. Arama artık PRD Kural B'ye uygun şekilde **yalnızca Labels (Etiketler) kolonunda** yapılmaktadır. Bu kural `npm run test:parser` ile otomatik test altına alınmıştır.
+  - **Düzenlenen hata açıklamalarının kayması giderildi.** Açıklamalar satır sırasına göre saklandığı için tarih filtresi uygulandığında yazılan metin başka bir kaydın satırına geçebiliyordu; artık kaydın kendi bilet numarasına bağlı tutulmaktadır.
+  - **Platform artık elle değiştirilebilir.** Bilet anahtarlarından platform tespit edilemediğinde sistem sessizce "IOS" yazıyordu. Artık uyarı gösterilmekte ve Kısım A'daki Platform alanı açılır listeden seçilebilmektedir.
+  - **"Mail için Kopyala" hataları artık görünür.** Panoya yazma başarısız olduğunda kullanıcı hiçbir uyarı almıyor, kopyalandığını sanıyordu. Ayrıca düz metin (text/plain) karşılığı da panoya yazılmaktadır. Aynı şekilde PDF hataları da rapor ekranında gösterilmektedir.
+  - Rapor başlıklarındaki `<`, `>`, `&` karakterleri mail çıktısında kaçırılarak tablo bozulması engellendi.
+  - Sayısal (gg/aa/yyyy) tarih formatları ayrıştırılabilir hale getirildi; daha önce ayrıştırılamayan tarihler kaydın yanlışlıkla gri gösterilmesine yol açıyordu.
+  - Arayüzdeki "AND: CSV İndir" bağlantısı IOS filtresine (18442) gidiyordu; Android filtresine (18441) yönlendirildi.
+  - Depo temizliği: `.gitignore` eklendi, `node_modules/` ve `dist/` takipten çıkarıldı, `.env.example` eklendi, README yeniden yazıldı.
 
 ## 6. Referans JQL Filtreleri
 

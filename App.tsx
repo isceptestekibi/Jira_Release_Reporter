@@ -40,6 +40,8 @@ const App: React.FC = () => {
     setError(null);
     setFilterCutoffTimestamp(null);
     setSuccessMessage(null);
+    setPlatformOverride(null);
+    setEditedBugSummaries({});
 
     try {
       let parsedTasks: JiraTask[] = [];
@@ -62,6 +64,8 @@ const App: React.FC = () => {
     setError(null);
     setFilterCutoffTimestamp(null);
     setSuccessMessage(null);
+    setPlatformOverride(null);
+    setEditedBugSummaries({});
   };
 
   const handleDateClick = (dateStr: string) => {
@@ -105,6 +109,18 @@ const App: React.FC = () => {
         return new Date(year, month, parseInt(day), hour, min).getTime();
       }
     }
+    // Sayısal tarih formatı: gg/aa/yyyy veya gg/aa/yy (Jira CSV export'u yerelleştirilmiş olabiliyor).
+    // Bu fallback olmadan tarih 0 dönüyor ve kayıt "çok eski" sayılıp yanlışlıkla gri gösteriliyordu.
+    const numeric = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (numeric) {
+      const [, d, m, y, h, mi] = numeric;
+      let year = parseInt(y);
+      if (year < 100) year += 2000;
+      const month = parseInt(m) - 1;
+      if (month >= 0 && month <= 11) {
+        return new Date(year, month, parseInt(d), h ? parseInt(h) : 0, mi ? parseInt(mi) : 0).getTime();
+      }
+    }
     return 0;
   };
 
@@ -140,12 +156,18 @@ const App: React.FC = () => {
     return filteredTasks.filter(t => t.issueType.toLowerCase() === 'bug');
   }, [filteredTasks]);
 
-  const detectedPlatform = useMemo(() => {
-    const keys = tasks.map(t => t.originalKey ? t.originalKey.toUpperCase() : '');
+  // Platform bilet anahtarından tespit edilir. Hiçbiri eşleşmezse tespit edilemedi sayılır;
+  // eskiden sessizce 'IOS' yazıyordu ve müşteriye yanlış platform bilgisi gidebiliyordu.
+  const detectedPlatform = useMemo<'ANDROID' | 'IOS' | null>(() => {
+    const keys = tasks.map(t => (t.originalKey ? t.originalKey.toUpperCase() : ''));
     if (keys.some(k => k.includes('ISCEPANDROID'))) return 'ANDROID';
     if (keys.some(k => k.includes('ISCEPIPHONE'))) return 'IOS';
-    return 'IOS';
+    return null;
   }, [tasks]);
+
+  const [platformOverride, setPlatformOverride] = useState<'ANDROID' | 'IOS' | null>(null);
+  const platform: 'ANDROID' | 'IOS' = platformOverride ?? detectedPlatform ?? 'IOS';
+  const platformUncertain = detectedPlatform === null && platformOverride === null;
 
   const displayVersion = useMemo(() => {
     const activeTasks = filteredTasks.filter(t => {
@@ -181,7 +203,35 @@ const App: React.FC = () => {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [editableVersion, setEditableVersion] = useState('');
   const [editablePackageUrl, setEditablePackageUrl] = useState("Paket linkini ekle ve paketi BETA'lamayı (Softtech & İşBankası grup yetkisi) unutma.");
-  const [editedBugSummaries, setEditedBugSummaries] = useState<Record<number, string>>({});
+  // Düzenlenen bug açıklamaları kaydın KENDİ kimliğine göre saklanır.
+  // Eskiden dizi index'i (0,1,2...) anahtar olarak kullanılıyordu; tarih filtresi
+  // sıralamayı değiştirdiğinde yazdığın metin başka bir kaydın satırına kayıyordu.
+  const [editedBugSummaries, setEditedBugSummaries] = useState<Record<string, string>>({});
+
+  const bugRowKey = (t: JiraTask): string =>
+    t.originalKey && t.originalKey !== 'N/A'
+      ? t.originalKey
+      : `${t.backlogId}|${t.externalRcId}|${t.summary}`;
+
+  // Bug satırında gösterilecek açıklama. Ekran ve mail çıktısı bu tek kaynaktan beslenir
+  // ki ikisi arasında fark oluşmasın.
+  const getBugSummary = (task: JiraTask): string => {
+    const edited = editedBugSummaries[bugRowKey(task)];
+    if (edited !== undefined) return edited;
+
+    // Bug'ın CCRSP'si varsa, başlık olarak CCRSP'nin kendi özeti kullanılır (PRD Kural B.1).
+    if (task.backlogId !== '-') {
+      const relatedCcrspTask = tasks.find(t => t.originalKey === task.backlogId);
+      if (relatedCcrspTask) return relatedCcrspTask.summary;
+      if (task.ccrspSummaryHint) return task.ccrspSummaryHint;
+    }
+    return task.summary;
+  };
+
+  // Mail HTML'ine gömülecek metinlerde <, >, & karakterlerini kaçır.
+  // Aksi halde başlığında "<" geçen bir Jira kaydı mail tablosunu bozuyordu.
+  const escapeHtml = (s: string): string =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const notesRef = useRef<HTMLDivElement>(null);
   const bilgiRef = useRef<HTMLDivElement>(null);
 
@@ -231,7 +281,9 @@ const App: React.FC = () => {
 
     if (items.length > 0) {
       notesRef.current.innerHTML = items
-        .map(item => `<div style="margin-bottom: 12px;"><strong>${item.summary}</strong> : <div style="margin-top: 6px;">${item.note}</div></div>`)
+        // item.note bilinçli olarak HTML'dir (Jira Release Notes zengin metin olabiliyor),
+        // ancak item.summary düz metindir ve kaçırılmalıdır.
+        .map(item => `<div style="margin-bottom: 12px;"><strong>${escapeHtml(item.summary)}</strong> : <div style="margin-top: 6px;">${item.note}</div></div>`)
         .join('');
     } else {
       notesRef.current.innerHTML = '<div><br></div>';
@@ -265,7 +317,7 @@ const App: React.FC = () => {
 
     const opt = {
       margin: 0,
-      filename: `Jira_Release_${displayVersion || 'Report'}.pdf`,
+      filename: `Jira_Release_${platform}_${(editableVersion || displayVersion || 'Report').replace(/[^\w.-]/g, '_')}.pdf`,
       image: { type: 'jpeg', quality: 1 },
       html2canvas: {
         scale: 2,
@@ -359,28 +411,18 @@ const App: React.FC = () => {
       const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(t.statusCategoryChanged) <= filterCutoffTimestamp;
       const textStyle = isGrayedOut ? 'color: #334155; font-style: italic;' : 'color: #000000;';
       const cellBg = isGrayedOut ? 'background-color: #cbd5e1;' : 'background-color: #ffffff;';
-      let epicCell = rowSpan > 0 ? `<td rowspan="${rowSpan}" style="${borderStyle} vertical-align: middle; ${isGrayedOut ? 'color: #334155; font-style: italic; background-color: #cbd5e1;' : 'color: #000000; background-color: #ffffff;'}">${t.epicName}</td>` : '';
+      let epicCell = rowSpan > 0 ? `<td rowspan="${rowSpan}" style="${borderStyle} vertical-align: middle; ${isGrayedOut ? 'color: #334155; font-style: italic; background-color: #cbd5e1;' : 'color: #000000; background-color: #ffffff;'}">${escapeHtml(t.epicName)}</td>` : '';
       const displayId = t.backlogId !== '-' ? t.backlogId : (t.externalRcId !== '-' ? t.externalRcId : '-');
       const idCellContent = displayId !== '-' ? `<a href="https://commencis.atlassian.net/browse/${displayId}" style="color: ${isGrayedOut ? '#334155' : 'blue'}; text-decoration: underline;">${displayId}</a>` : displayId;
-      storyRows += `<tr><td style="${borderStyleNoWrap} ${textStyle} ${cellBg}">${idCellContent}</td>${epicCell}<td style="${borderStyle} ${textStyle} ${cellBg}">${t.summary}</td></tr>`;
+      storyRows += `<tr><td style="${borderStyleNoWrap} ${textStyle} ${cellBg}">${idCellContent}</td>${epicCell}<td style="${borderStyle} ${textStyle} ${cellBg}">${escapeHtml(t.summary)}</td></tr>`;
     }
 
-    let bugRows = bugTasks.length > 0 ? bugTasks.map((t, idx) => {
+    let bugRows = bugTasks.length > 0 ? bugTasks.map((t) => {
       const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(t.statusCategoryChanged) <= filterCutoffTimestamp;
       const defectId = t.backlogId !== '-' ? t.backlogId : (t.externalRcId !== '-' ? t.externalRcId : '-');
       const idContent = defectId !== '-' ? `<a href="https://commencis.atlassian.net/browse/${defectId}" style="color: ${isGrayedOut ? '#334155' : 'blue'}; text-decoration: underline;">${defectId}</a>` : defectId;
-      
-      let defaultSummary = t.summary;
-      if (t.backlogId !== '-') {
-        const relatedCcrspTask = tasks.find(pt => pt.originalKey === t.backlogId);
-        if (relatedCcrspTask) {
-          defaultSummary = relatedCcrspTask.summary;
-        } else if (t.ccrspSummaryHint) {
-          defaultSummary = t.ccrspSummaryHint;
-        }
-      }
-      
-      const summary = editedBugSummaries[idx] ?? defaultSummary;
+
+      const summary = escapeHtml(getBugSummary(t));
       return `<tr><td style="${borderStyleNoWrap} ${isGrayedOut ? 'background-color: #cbd5e1; font-style: italic;' : 'background-color: #ffffff;'}">${idContent}</td><td style="${borderStyle} ${isGrayedOut ? 'background-color: #cbd5e1; font-style: italic;' : 'background-color: #ffffff;'} word-wrap: break-word; white-space: pre-wrap;">${summary}</td></tr>`;
     }).join('') : `<tr><td style="${borderStyleNoWrap} height: 20px;">&nbsp;</td><td style="${borderStyle}">&nbsp;</td></tr>`;
 
@@ -400,9 +442,20 @@ const App: React.FC = () => {
           </tr>
           <tr><td style="${borderStyle}">&nbsp;</td><td style="${borderStyle} ${bgGray}">Proje Bilgisi:</td><td style="${borderStyle}">İşCep Projesi</td></tr>
           <tr><td style="${borderStyle}">&nbsp;</td><td style="${borderStyle} ${bgGray}">Sürüm Bilgisi:</td><td style="${borderStyle}">${editableVersion || displayVersion}</td></tr>
-          <tr><td style="${borderStyle}">&nbsp;</td><td style="${borderStyle} ${bgGray}">Platform:</td><td style="${borderStyle}">${detectedPlatform}</td></tr>
+          <tr><td style="${borderStyle}">&nbsp;</td><td style="${borderStyle} ${bgGray}">Platform:</td><td style="${borderStyle}">${platform}</td></tr>
         </table>
-        
+
+        <table width="794" style="width: 794px; border-collapse: collapse; border: 1px solid black; margin-top: 10px;">
+          <tr>
+            <td width="142" style="${borderStyle} ${headerBlue} width: 18%;">KISIM B</td>
+            <td colspan="2" style="${borderStyle} ${headerBlue}">Sürüm Detayları</td>
+          </tr>
+          <tr><td colspan="3" style="${borderStyle} ${bgGray}">1. Belirtilmesi Gerekenler</td></tr>
+          <tr><td colspan="3" style="${borderStyle} min-height: 50px; vertical-align: top;">${notesMailHtml}</td></tr>
+          <tr><td colspan="3" style="${borderStyle} ${bgGray}">2. Bilinen Durumlar:</td></tr>
+          <tr><td colspan="3" style="${borderStyle} height: 50px;">${bilgiMailHtml}</td></tr>
+        </table>
+
         ${infoRow}
 
         <table width="794" style="width: 794px; border-collapse: collapse; border: 1px solid black; margin-top: 5px;">
@@ -426,21 +479,10 @@ const App: React.FC = () => {
 
         <table width="794" style="width: 794px; border-collapse: collapse; border: 1px solid black; margin-top: 10px;">
           <tr>
-            <td width="142" style="${borderStyle} ${headerBlue} width: 18%;">KISIM B</td>
-            <td colspan="2" style="${borderStyle} ${headerBlue}">Sürüm Detayları</td>
-          </tr>
-          <tr><td colspan="3" style="${borderStyle} ${bgGray}">1. Belirtilmesi Gerekenler</td></tr>
-          <tr><td colspan="3" style="${borderStyle} min-height: 50px; vertical-align: top;">${notesMailHtml}</td></tr>
-          <tr><td colspan="3" style="${borderStyle} ${bgGray}">2. Bilinen Durumlar:</td></tr>
-          <tr><td colspan="3" style="${borderStyle} height: 50px;">${bilgiMailHtml}</td></tr>
-        </table>
-
-        <table width="794" style="width: 794px; border-collapse: collapse; border: 1px solid black; margin-top: 10px;">
-          <tr>
             <td width="142" style="${borderStyle} ${headerBlue} width: 18%;">KISIM C</td>
             <td colspan="2" style="${borderStyle} ${headerBlue}">Paket Detayları</td>
           </tr>
-          <tr><td colspan="3" style="${borderStyle}">Dokümanda iletilen geliştirmeleri test edebileceğiniz ${detectedPlatform} paketini aşağıdaki link üzerinden indirebilirsiniz.<br/><br/><strong>${detectedPlatform} Platform Paket Bilgileri:</strong></td></tr>
+          <tr><td colspan="3" style="${borderStyle}">Dokümanda iletilen geliştirmeleri test edebileceğiniz ${platform} paketini aşağıdaki link üzerinden indirebilirsiniz.<br/><br/><strong>${platform} Platform Paket Bilgileri:</strong></td></tr>
           <tr style="${bgGray}">
             <td colspan="3" style="${borderStyle} color: blue; text-decoration: underline;">Paket URL</td>
           </tr>
@@ -449,15 +491,56 @@ const App: React.FC = () => {
       </div>
     `;
 
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const clipboardItem = new ClipboardItem({ 'text/html': blob });
-
     window.scrollTo(0, 0);
 
-    navigator.clipboard.write([clipboardItem]).then(() => {
-      setSuccessMessage('Mail için kopyalandı.');
-      setTimeout(() => setSuccessMessage(null), 3000);
-    });
+    // Düz metin karşılığı: Outlook/Mail dışında (Notepad, Slack vb.) yapıştırıldığında
+    // boş kalmaması için text/plain de panoya yazılır.
+    const plainText = htmlContent
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<\/(tr|div|table|p)>/gi, '\n')
+      .replace(/<\/td>/gi, '\t')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&bull;/g, '•')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    const copyFailed = (detail: string) => {
+      console.error('Panoya kopyalama hatası:', detail);
+      setSuccessMessage(null);
+      setError(
+        'Rapor panoya kopyalanamadı. Tarayıcı pano iznini engellemiş olabilir. ' +
+          'Sayfaya bir kez tıklayıp tekrar deneyin; sorun sürerse "PDF İndir" seçeneğini kullanın.'
+      );
+    };
+
+    if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+      copyFailed('Clipboard API bu tarayıcıda/bağlamda kullanılamıyor (HTTPS gerekir).');
+      return;
+    }
+
+    try {
+      const clipboardItem = new ClipboardItem({
+        'text/html': new Blob([htmlContent], { type: 'text/html' }),
+        'text/plain': new Blob([plainText], { type: 'text/plain' }),
+      });
+
+      navigator.clipboard
+        .write([clipboardItem])
+        .then(() => {
+          setError(null);
+          setSuccessMessage('Mail için kopyalandı. Outlook/Mail içinde Cmd+V ile yapıştırabilirsiniz.');
+          setTimeout(() => setSuccessMessage(null), 4000);
+        })
+        .catch(err => copyFailed(String(err)));
+    } catch (err) {
+      copyFailed(String(err));
+    }
   };
 
   const handleCopyToEmail = () => {
@@ -573,7 +656,7 @@ const App: React.FC = () => {
                   </p>
                   <p className="text-xs text-slate-500 mb-3">(İndirme hatası gelirse "Retry Operation" butonu tıklanarak csv'ler indirilebiliyor.)</p>
                   <div className="flex flex-col gap-2">
-                    <a href="https://commencis.atlassian.net/sr/jira.issueviews:searchrequest-csv-all-fields/temp/SearchRequest.csv?jqlQuery=filter=18442" target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:bg-blue-100 p-2 rounded transition-colors text-blue-700 font-medium bg-blue-50">
+                    <a href="https://commencis.atlassian.net/sr/jira.issueviews:searchrequest-csv-all-fields/temp/SearchRequest.csv?jqlQuery=filter=18441" target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:bg-blue-100 p-2 rounded transition-colors text-blue-700 font-medium bg-blue-50">
                       <Smartphone className="w-4 h-4" />
                       AND: CSV İndir
                     </a>
@@ -596,6 +679,25 @@ const App: React.FC = () => {
         {status === ReportStatus.LOADED && (
           <div className="space-y-8 pb-20">
             {successMessage && <div className="bg-green-50 p-4 rounded-lg border border-green-200 text-green-800 font-medium no-print max-w-[794px] mx-auto">{successMessage}</div>}
+
+            {platformUncertain && (
+              <div className="bg-amber-50 p-4 rounded-lg border border-amber-300 text-amber-900 font-medium no-print max-w-[794px] mx-auto flex items-start gap-3">
+                <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                <span>
+                  Bilet anahtarlarından platform tespit edilemedi (ISCEPANDROID / ISCEPIPHONE bulunamadı).
+                  Rapora varsayılan olarak <strong>IOS</strong> yazıldı — göndermeden önce Kısım A'daki
+                  Platform alanını kontrol edin.
+                </span>
+              </div>
+            )}
+
+            {/* Rapor ekranındayken oluşan hatalar (PDF/pano) eskiden hiç gösterilmiyordu. */}
+            {error && (
+              <div className="bg-red-50 p-4 rounded-lg border border-red-200 text-red-800 font-medium no-print max-w-[794px] mx-auto flex items-start justify-between gap-4">
+                <span>{error}</span>
+                <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800 font-bold shrink-0" aria-label="Kapat">×</button>
+              </div>
+            )}
 
             {/* UI Shadow Wrapper - Not included in PDF */}
             <div className="mx-auto shadow-2xl no-print rounded-sm overflow-hidden" style={{ width: '794px' }}>
@@ -636,118 +738,38 @@ const App: React.FC = () => {
                         />
                       </td>
                     </tr>
-                    <tr><td>&nbsp;</td><td className="bg-gray">Platform:</td><td>{detectedPlatform}</td></tr>
+                    <tr>
+                      <td>&nbsp;</td>
+                      <td className="bg-gray">Platform:</td>
+                      <td style={{ padding: 0 }}>
+                        <select
+                          value={platform}
+                          onChange={e => setPlatformOverride(e.target.value as 'ANDROID' | 'IOS')}
+                          title="Platform bilgisini değiştirmek için seçin"
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            fontFamily: 'inherit',
+                            fontSize: 'inherit',
+                            color: 'inherit',
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            boxSizing: 'border-box',
+                            appearance: 'none',
+                          }}
+                        >
+                          <option value="IOS">IOS</option>
+                          <option value="ANDROID">ANDROID</option>
+                        </select>
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
 
-                {filterCutoffTimestamp !== null && (
-                  <div style={{ padding: '2px 0', border: 'none' }} className="no-print">
-                    <table style={{ border: 'none' }}>
-                      <tr style={{ border: 'none' }}>
-                        <td style={{ border: 'none', width: '24px', paddingRight: '4px', verticalAlign: 'middle' }}>
-                          <div style={{ width: '16px', height: '16px', border: '1.5px solid #ea580c', borderRadius: '50%', textAlign: 'center', color: '#ea580c', fontSize: '10px', fontWeight: 'bold', fontStyle: 'normal', lineHeight: '14px' }}>i</div>
-                        </td>
-                        <td className="text-orange-info" style={{ border: 'none', color: '#ea580c', fontWeight: 'bold', fontStyle: 'italic', fontSize: '12.5px', padding: '0', verticalAlign: 'middle' }}>Aşağıda testi yeni tamamlanan kayıtlar beyaz , önceki paketler ile iletilmiş olanlar gri olarak belirtilmiştir.</td>
-                      </tr>
-                    </table>
-                  </div>
-                )}
-
-                <table style={{ marginTop: '5px' }}>
-                  <colgroup><col style={{ width: '18%' }} /><col style={{ width: '22%' }} /><col style={{ width: '60%' }} /></colgroup>
-                  <thead><tr><td colSpan={3} className="header-blue text-center">Talepler</td></tr><tr className="bg-gray"><td className="font-bold">Backlog ID</td><td className="font-bold">Epic Name</td><td className="font-bold">Açıklama</td></tr></thead>
-                  <tbody>
-                    {storyTasks.map((task, idx) => {
-                      const rowSpan = getEpicRowSpan(idx);
-                      const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(task.statusCategoryChanged) <= filterCutoffTimestamp;
-                      const displayId = task.backlogId !== '-' ? task.backlogId : (task.externalRcId !== '-' ? task.externalRcId : '-');
-                      return (
-                        <tr key={idx}>
-                          <td className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit', whiteSpace: 'nowrap' }}>
-                            {displayId !== '-' ? <a href={`https://commencis.atlassian.net/browse/${displayId}`} target="_blank" rel="noreferrer" style={{ color: isGrayedOut ? '#334155' : 'blue', textDecoration: 'underline' }}>{displayId}</a> : displayId}
-                          </td>
-                          {rowSpan > 0 && <td rowSpan={rowSpan} className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ verticalAlign: 'middle', fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit' }}>{task.epicName}</td>}
-                          <td className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit' }}>{task.summary}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                <table style={{ marginTop: '10px' }}>
-                  <colgroup><col style={{ width: '18%' }} /><col style={{ width: '82%' }} /></colgroup>
-                  <thead><tr><td colSpan={2} className="header-blue text-center">Tamamlanan Kayıtlar</td></tr><tr className="bg-gray"><td className="font-bold">Defect ID</td><td className="font-bold">Açıklama</td></tr></thead>
-                  <tbody>
-                    {bugTasks.length > 0 ? bugTasks.map((task, idx) => {
-                      const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(task.statusCategoryChanged) <= filterCutoffTimestamp;
-                      const defectId = task.backlogId !== '-' ? task.backlogId : (task.externalRcId !== '-' ? task.externalRcId : '-');
-                      
-                      // Eğer bu bug'ın bir CCRSP ID'si varsa, aynı Excel/HTML dosyasında bu CCRSP'nin kendi asıl kaydı var mı diye bakalım.
-                      // Eğer varsa, bug'ın kendi başlığı yerine o CCRSP'nin başlığını (summary) varsayılan yapalım.
-                      let defaultSummary = task.summary;
-                      if (task.backlogId !== '-') {
-                        const relatedCcrspTask = tasks.find(t => t.originalKey === task.backlogId);
-                        if (relatedCcrspTask) {
-                          defaultSummary = relatedCcrspTask.summary;
-                        } else if (task.ccrspSummaryHint) {
-                          // Eğer listeye dahil değilse ama Linked Issues kolonunda başlığı belirdiyse onu kullanalım!
-                          defaultSummary = task.ccrspSummaryHint;
-                        }
-                      }
-
-                      return (
-                        <tr key={idx}>
-                          <td className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit', whiteSpace: 'nowrap' }}>
-                            {defectId !== '-' ? <a href={`https://commencis.atlassian.net/browse/${defectId}`} target="_blank" rel="noreferrer" style={{ color: isGrayedOut ? '#334155' : 'blue', textDecoration: 'underline' }}>{defectId}</a> : defectId}
-                          </td>
-                          <td
-                            className={isGrayedOut ? "bg-slate-300" : "bg-white"}
-                            style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit', padding: 0 }}
-                          >
-                            <textarea
-                              value={editedBugSummaries[idx] ?? defaultSummary}
-                              onChange={e => {
-                                setEditedBugSummaries(prev => ({ ...prev, [idx]: e.target.value }));
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                              }}
-                              onFocus={e => {
-                                e.currentTarget.style.boxShadow = 'inset 0 -2px 0 0 #2563eb';
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                              }}
-                              onBlur={e => (e.currentTarget.style.boxShadow = 'none')}
-                              rows={1}
-                              style={{
-                                width: '100%',
-                                border: 'none',
-                                outline: 'none',
-                                background: 'transparent',
-                                fontFamily: 'inherit',
-                                fontSize: 'inherit',
-                                color: 'inherit',
-                                fontStyle: 'inherit',
-                                padding: '4px 8px',
-                                cursor: 'text',
-                                boxSizing: 'border-box',
-                                resize: 'none',
-                                overflow: 'hidden',
-                                minHeight: '30px',
-                                lineHeight: '1.5'
-                              }}
-                              ref={(el) => {
-                                if (el) {
-                                  el.style.height = 'auto';
-                                  el.style.height = el.scrollHeight + 'px';
-                                }
-                              }}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    }) : <tr style={{ height: '40px' }}><td>&nbsp;</td><td>&nbsp;</td></tr>}
-                  </tbody>
-                </table>
+                {/* KISIM B — Sürüm Detayları. Talepler/Tamamlanan Kayıtlar tablolarından ÖNCE,
+                    Kısım A'nın hemen altında yer alır (müşteri önce bu notları okusun). */}
                 <table style={{ marginTop: '10px' }}>
                   <colgroup><col style={{ width: '18%' }} /><col style={{ width: '22%' }} /><col style={{ width: '60%' }} /></colgroup>
                   <thead><tr><td className="header-blue">KISIM B</td><td colSpan={2} className="header-blue">Sürüm Detayları</td></tr></thead>
@@ -797,14 +819,111 @@ const App: React.FC = () => {
                   </tbody>
                 </table>
 
+                {filterCutoffTimestamp !== null && (
+                  <div style={{ padding: '2px 0', border: 'none' }} className="no-print">
+                    <table style={{ border: 'none' }}>
+                      <tr style={{ border: 'none' }}>
+                        <td style={{ border: 'none', width: '24px', paddingRight: '4px', verticalAlign: 'middle' }}>
+                          <div style={{ width: '16px', height: '16px', border: '1.5px solid #ea580c', borderRadius: '50%', textAlign: 'center', color: '#ea580c', fontSize: '10px', fontWeight: 'bold', fontStyle: 'normal', lineHeight: '14px' }}>i</div>
+                        </td>
+                        <td className="text-orange-info" style={{ border: 'none', color: '#ea580c', fontWeight: 'bold', fontStyle: 'italic', fontSize: '12.5px', padding: '0', verticalAlign: 'middle' }}>Aşağıda testi yeni tamamlanan kayıtlar beyaz , önceki paketler ile iletilmiş olanlar gri olarak belirtilmiştir.</td>
+                      </tr>
+                    </table>
+                  </div>
+                )}
+
+                <table style={{ marginTop: '5px' }}>
+                  <colgroup><col style={{ width: '18%' }} /><col style={{ width: '22%' }} /><col style={{ width: '60%' }} /></colgroup>
+                  <thead><tr><td colSpan={3} className="header-blue text-center">Talepler</td></tr><tr className="bg-gray"><td className="font-bold">Backlog ID</td><td className="font-bold">Epic Name</td><td className="font-bold">Açıklama</td></tr></thead>
+                  <tbody>
+                    {storyTasks.map((task, idx) => {
+                      const rowSpan = getEpicRowSpan(idx);
+                      const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(task.statusCategoryChanged) <= filterCutoffTimestamp;
+                      const displayId = task.backlogId !== '-' ? task.backlogId : (task.externalRcId !== '-' ? task.externalRcId : '-');
+                      return (
+                        <tr key={idx}>
+                          <td className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit', whiteSpace: 'nowrap' }}>
+                            {displayId !== '-' ? <a href={`https://commencis.atlassian.net/browse/${displayId}`} target="_blank" rel="noreferrer" style={{ color: isGrayedOut ? '#334155' : 'blue', textDecoration: 'underline' }}>{displayId}</a> : displayId}
+                          </td>
+                          {rowSpan > 0 && <td rowSpan={rowSpan} className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ verticalAlign: 'middle', fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit' }}>{task.epicName}</td>}
+                          <td className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit' }}>{task.summary}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                <table style={{ marginTop: '10px' }}>
+                  <colgroup><col style={{ width: '18%' }} /><col style={{ width: '82%' }} /></colgroup>
+                  <thead><tr><td colSpan={2} className="header-blue text-center">Tamamlanan Kayıtlar</td></tr><tr className="bg-gray"><td className="font-bold">Defect ID</td><td className="font-bold">Açıklama</td></tr></thead>
+                  <tbody>
+                    {bugTasks.length > 0 ? bugTasks.map((task, idx) => {
+                      const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(task.statusCategoryChanged) <= filterCutoffTimestamp;
+                      const defectId = task.backlogId !== '-' ? task.backlogId : (task.externalRcId !== '-' ? task.externalRcId : '-');
+                      const rowKey = bugRowKey(task);
+
+                      return (
+                        <tr key={idx}>
+                          <td className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit', whiteSpace: 'nowrap' }}>
+                            {defectId !== '-' ? <a href={`https://commencis.atlassian.net/browse/${defectId}`} target="_blank" rel="noreferrer" style={{ color: isGrayedOut ? '#334155' : 'blue', textDecoration: 'underline' }}>{defectId}</a> : defectId}
+                          </td>
+                          <td
+                            className={isGrayedOut ? "bg-slate-300" : "bg-white"}
+                            style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit', padding: 0 }}
+                          >
+                            <textarea
+                              value={getBugSummary(task)}
+                              onChange={e => {
+                                setEditedBugSummaries(prev => ({ ...prev, [rowKey]: e.target.value }));
+                                e.target.style.height = 'auto';
+                                e.target.style.height = e.target.scrollHeight + 'px';
+                              }}
+                              onFocus={e => {
+                                e.currentTarget.style.boxShadow = 'inset 0 -2px 0 0 #2563eb';
+                                e.target.style.height = 'auto';
+                                e.target.style.height = e.target.scrollHeight + 'px';
+                              }}
+                              onBlur={e => (e.currentTarget.style.boxShadow = 'none')}
+                              rows={1}
+                              style={{
+                                width: '100%',
+                                border: 'none',
+                                outline: 'none',
+                                background: 'transparent',
+                                fontFamily: 'inherit',
+                                fontSize: 'inherit',
+                                color: 'inherit',
+                                fontStyle: 'inherit',
+                                padding: '4px 8px',
+                                cursor: 'text',
+                                boxSizing: 'border-box',
+                                resize: 'none',
+                                overflow: 'hidden',
+                                minHeight: '30px',
+                                lineHeight: '1.5'
+                              }}
+                              ref={(el) => {
+                                if (el) {
+                                  el.style.height = 'auto';
+                                  el.style.height = el.scrollHeight + 'px';
+                                }
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    }) : <tr style={{ height: '40px' }}><td>&nbsp;</td><td>&nbsp;</td></tr>}
+                  </tbody>
+                </table>
+
                 <table style={{ marginTop: '10px' }}>
                   <colgroup><col style={{ width: '18%' }} /><col style={{ width: '22%' }} /><col style={{ width: '60%' }} /></colgroup>
                   <thead><tr><td className="header-blue">KISIM C</td><td colSpan={2} className="header-blue">Paket Detayları</td></tr></thead>
                   <tbody>
                     <tr>
                       <td colSpan={3}>
-                        Dokümanda iletilen geliştirmeleri test edebileceğiniz {detectedPlatform} paketini aşağıdaki link üzerinden indirebilirsiniz.<br /><br />
-                        <strong>{detectedPlatform} Platform Paket Bilgileri:</strong>
+                        Dokümanda iletilen geliştirmeleri test edebileceğiniz {platform} paketini aşağıdaki link üzerinden indirebilirsiniz.<br /><br />
+                        <strong>{platform} Platform Paket Bilgileri:</strong>
                       </td>
                     </tr>
                     <tr className="bg-gray">

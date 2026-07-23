@@ -29,6 +29,11 @@ export const parseJiraHtml = async (file: File): Promise<JiraTask[]> => {
     return txt.includes('issue type') || txt.includes('sorun tipi');
   });
 
+  const labelsIndex = headers.findIndex(h => {
+    const txt = h.textContent?.toLowerCase().trim() || '';
+    return txt.includes('label') || txt.includes('etiket');
+  });
+
   const releaseNotesIndex = headers.findIndex(h => {
     const txt = h.textContent?.toLowerCase().trim() || '';
     return txt.includes('release') || txt.includes('sürüm not');
@@ -112,13 +117,21 @@ export const parseJiraHtml = async (file: File): Promise<JiraTask[]> => {
       externalRcId = m;
     }
 
+    // --- BUG SINIFLANDIRMA ---
+    // PRD Kural B: Bir kayıt yalnızca şu durumlarda "Bug" sayılır:
+    //   1. Issue Type'ı zaten Bug ise,
+    //   2. ETİKETİNDE external / accessibilitybug geçiyorsa,
+    //   3. Dış sistem bağlantısı (ISCEPEXTRC / ISCOREXT) varsa.
+    // DİKKAT: Bu kontrol satırın tamamında değil, SADECE etiket hücresinde yapılır.
+    // Aksi halde özetinde "bug" veya "external" kelimesi geçen her Story
+    // yanlışlıkla "Tamamlanan Kayıtlar" tablosuna düşüyordu.
+    const labelText = (getText('labels') || getByIndex(labelsIndex)).toLowerCase();
+
     if (issueType.toLowerCase() !== 'bug') {
-      if (externalRcId !== '-') {
-        issueType = 'Bug';
-      } else if (
-        allRowText.toLowerCase().includes('accessibilitybug') ||
-        allRowText.toLowerCase().match(/\bbug\b/i) ||
-        allRowText.toLowerCase().includes('external')
+      if (
+        externalRcId !== '-' ||
+        labelText.includes('accessibilitybug') ||
+        labelText.includes('external')
       ) {
         issueType = 'Bug';
       }

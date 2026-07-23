@@ -1,0 +1,21 @@
+# Bağımlılıklar
+node_modules/
+
+# Build çıktısı (gh-pages branch'ine deploy edilir, main'de tutulmaz)
+dist/
+
+# Ortam değişkenleri — .env.example hariç
+.env
+.env.*
+!.env.example
+
+# İşletim sistemi / editör
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Log
+npm-debug.log*
+yarn-error.log*
+*.log

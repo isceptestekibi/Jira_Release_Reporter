@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "lint": "tsc --noEmit",
+    "test:parser": "esbuild scripts/test-parser.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/test-parser.cjs --log-level=error && node node_modules/.cache/test-parser.cjs",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"

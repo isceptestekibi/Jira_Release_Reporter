@@ -4,10 +4,17 @@ import { GoogleGenAI } from "@google/genai";
 import { JiraTask } from "../types";
 
 export async function generateReleaseSummary(tasks: JiraTask[]): Promise<string> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  
+  // Tarayıcıda `process` tanımlı olmadığı için doğrudan erişim ReferenceError atar
+  // ve aşağıdaki anlamlı hata mesajı hiç gösterilemez. Güvenli erişim kullanılıyor.
+  const apiKey =
+    import.meta.env.VITE_GEMINI_API_KEY ||
+    (globalThis as any).process?.env?.GEMINI_API_KEY;
+
   if (!apiKey) {
-    throw new Error("Gemini API anahtarı bulunamadı. Lütfen .env dosyasını kontrol edin.");
+    throw new Error(
+      "Gemini API anahtarı bulunamadı. Proje kökünde .env.local dosyası oluşturup " +
+        "VITE_GEMINI_API_KEY değerini girin (örnek için .env.example dosyasına bakın)."
+    );
   }
 
   const ai = new GoogleGenAI({ apiKey });

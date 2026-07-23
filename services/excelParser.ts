@@ -64,14 +64,25 @@ export const parseJiraExcel = async (file: File): Promise<JiraTask[]> => {
             externalRcId = m;
           }
 
+          // --- BUG SINIFLANDIRMA ---
+          // PRD Kural B: Bir kayıt yalnızca şu durumlarda "Bug" sayılır:
+          //   1. Issue Type'ı zaten Bug ise,
+          //   2. ETİKETİNDE external / accessibilitybug geçiyorsa,
+          //   3. Dış sistem bağlantısı (ISCEPEXTRC / ISCOREXT) varsa.
+          // DİKKAT: Bu kontrol satırın tamamında değil, SADECE etiket kolonlarında yapılır.
+          // Aksi halde özetinde "bug" veya "external" kelimesi geçen her Story
+          // yanlışlıkla "Tamamlanan Kayıtlar" tablosuna düşüyordu.
+          const labelText = Object.keys(row)
+            .filter(k => /label|etiket/i.test(k))
+            .map(k => String(row[k]).toLowerCase())
+            .join(' ');
+
           let parsedIssueType = issueType;
           if (parsedIssueType.toLowerCase() !== 'bug') {
-            if (externalRcId !== '-') {
-              parsedIssueType = 'Bug';
-            } else if (
-              allRowValues.toLowerCase().includes('accessibilitybug') ||
-              allRowValues.toLowerCase().match(/\bbug\b/i) ||
-              allRowValues.toLowerCase().includes('external')
+            if (
+              externalRcId !== '-' ||
+              labelText.includes('accessibilitybug') ||
+              labelText.includes('external')
             ) {
               parsedIssueType = 'Bug';
             }
