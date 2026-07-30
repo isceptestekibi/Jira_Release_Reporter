@@ -13,11 +13,114 @@ import {
 } from 'lucide-react';
 import { parseJiraExcel } from './services/excelParser';
 import { parseJiraHtml } from './services/htmlParser';
+import { resolveCcrsp } from './services/ccrspResolver';
 import { JiraTask, ReportStatus } from './types';
 import { APP_VERSION, APP_DATE } from './version';
 
 // html2pdf kütüphanesini dışarıdan alıyoruz
 declare const html2pdf: any;
+
+/**
+ * Rapor tablolarında yerinde düzenleme yapılan hücre.
+ * Kenarlıksız/şeffaf görünür, yani rapor görünümünü bozmaz; tıklandığında
+ * altında mavi bir çizgi çıkar. Çok satırlı metinlerde yüksekliği kendini ayarlar.
+ */
+interface EditableCellProps {
+  value: string;
+  onChange: (v: string) => void;
+  title?: string;
+  singleLine?: boolean;
+  isLink?: boolean;
+  linkColor?: string;
+}
+
+const EditableCell: React.FC<EditableCellProps> = ({ value, onChange, title, singleLine, isLink, linkColor }) => {
+  const autoSize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  };
+
+  const base: React.CSSProperties = {
+    flex: '1 1 auto',
+    minWidth: 0,
+    width: '100%',
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    fontFamily: 'inherit',
+    fontSize: 'inherit',
+    fontStyle: 'inherit',
+    color: isLink ? (linkColor || 'blue') : 'inherit',
+    textDecoration: isLink ? 'underline' : 'none',
+    padding: '4px 8px',
+    cursor: 'text',
+    boxSizing: 'border-box',
+    lineHeight: '1.5',
+  };
+
+  const onFocus = (e: React.FocusEvent<HTMLElement>) => {
+    e.currentTarget.style.boxShadow = 'inset 0 -2px 0 0 #2563eb';
+  };
+  const onBlur = (e: React.FocusEvent<HTMLElement>) => {
+    e.currentTarget.style.boxShadow = 'none';
+  };
+
+  if (singleLine) {
+    return (
+      <input
+        type="text"
+        value={value}
+        title={title}
+        onChange={e => onChange(e.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        style={base}
+      />
+    );
+  }
+
+  return (
+    <textarea
+      value={value}
+      title={title}
+      rows={1}
+      onChange={e => { onChange(e.target.value); autoSize(e.target); }}
+      onFocus={e => { onFocus(e); autoSize(e.currentTarget); }}
+      onBlur={onBlur}
+      ref={autoSize}
+      style={{ ...base, resize: 'none', overflow: 'hidden', minHeight: '30px' }}
+    />
+  );
+};
+
+/** Satırı rapordan çıkarma düğmesi. PDF ve yazdırma çıktısında gizlenir. */
+const RowDeleteButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="row-delete no-print"
+    title="Bu satırı rapordan çıkar"
+    aria-label="Satırı rapordan çıkar"
+    style={{
+      flex: '0 0 auto',
+      margin: '4px 4px 0 2px',
+      width: '20px',
+      height: '20px',
+      lineHeight: '16px',
+      padding: 0,
+      borderRadius: '4px',
+      border: '1px solid #cbd5e1',
+      background: '#ffffff',
+      color: '#dc2626',
+      fontSize: '14px',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+    }}
+  >
+    ×
+  </button>
+);
 
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<JiraTask[]>([]);
@@ -42,6 +145,10 @@ const App: React.FC = () => {
     setSuccessMessage(null);
     setPlatformOverride(null);
     setEditedBugSummaries({});
+    setEditedStorySummaries({});
+    setEditedIds({});
+    setEditedEpicNames({});
+    setHiddenRowKeys({});
 
     try {
       let parsedTasks: JiraTask[] = [];
@@ -66,6 +173,10 @@ const App: React.FC = () => {
     setSuccessMessage(null);
     setPlatformOverride(null);
     setEditedBugSummaries({});
+    setEditedStorySummaries({});
+    setEditedIds({});
+    setEditedEpicNames({});
+    setHiddenRowKeys({});
   };
 
   const handleDateClick = (dateStr: string) => {
@@ -129,6 +240,19 @@ const App: React.FC = () => {
     t.status.toLowerCase().includes('onay') ||
     t.status.toLowerCase().includes('test passed');
 
+  // --- SATIR KİMLİĞİ ---
+  // Elle yapılan düzenlemeler ve satır silme işlemleri kaydın KENDİ kimliğine bağlanır.
+  // Dizi sırası (index) kullanılmaz; tarih filtresi sıralamayı değiştirdiğinde
+  // yazdığın metnin başka satıra kaymasını önler.
+  const taskKey = (t: JiraTask): string =>
+    t.originalKey && t.originalKey !== 'N/A'
+      ? t.originalKey
+      : `${t.backlogId}|${t.externalRcId}|${t.summary}`;
+
+  // Rapordan elle çıkarılan (silinen) satırlar
+  const [hiddenRowKeys, setHiddenRowKeys] = useState<Record<string, boolean>>({});
+  const hiddenRowCount = Object.keys(hiddenRowKeys).length;
+
   const filteredTasks = useMemo(() => {
     let result = tasks.filter(isApproved);
     return result.sort((a, b) => {
@@ -141,8 +265,14 @@ const App: React.FC = () => {
     });
   }, [tasks, filterCutoffTimestamp]);
 
+  // Elle silinen satırlar hem ekrandan hem mail/PDF çıktısından düşer.
+  const visibleTasks = useMemo(
+    () => filteredTasks.filter(t => !hiddenRowKeys[taskKey(t)]),
+    [filteredTasks, hiddenRowKeys]
+  );
+
   const storyTasks = useMemo(() => {
-    return filteredTasks.filter(t => {
+    return visibleTasks.filter(t => {
       const isBug = t.issueType.toLowerCase() === 'bug';
       if (isBug) return false;
 
@@ -150,11 +280,11 @@ const App: React.FC = () => {
       // CCRSP veya diğer bağlantıları yoksa bile tabloya '-' olarak yansıyacak.
       return true;
     });
-  }, [filteredTasks]);
+  }, [visibleTasks]);
 
   const bugTasks = useMemo(() => {
-    return filteredTasks.filter(t => t.issueType.toLowerCase() === 'bug');
-  }, [filteredTasks]);
+    return visibleTasks.filter(t => t.issueType.toLowerCase() === 'bug');
+  }, [visibleTasks]);
 
   // Platform bilet anahtarından tespit edilir. Hiçbiri eşleşmezse tespit edilemedi sayılır;
   // eskiden sessizce 'IOS' yazıyordu ve müşteriye yanlış platform bilgisi gidebiliyordu.
@@ -203,20 +333,20 @@ const App: React.FC = () => {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [editableVersion, setEditableVersion] = useState('');
   const [editablePackageUrl, setEditablePackageUrl] = useState("Paket linkini ekle ve paketi BETA'lamayı (Softtech & İşBankası grup yetkisi) unutma.");
-  // Düzenlenen bug açıklamaları kaydın KENDİ kimliğine göre saklanır.
-  // Eskiden dizi index'i (0,1,2...) anahtar olarak kullanılıyordu; tarih filtresi
-  // sıralamayı değiştirdiğinde yazdığın metin başka bir kaydın satırına kayıyordu.
+  // --- ELLE YAPILAN DÜZENLEMELER ---
+  // Hepsi kaydın kendi kimliğine (taskKey) göre saklanır, dizi sırasına göre değil.
   const [editedBugSummaries, setEditedBugSummaries] = useState<Record<string, string>>({});
-
-  const bugRowKey = (t: JiraTask): string =>
-    t.originalKey && t.originalKey !== 'N/A'
-      ? t.originalKey
-      : `${t.backlogId}|${t.externalRcId}|${t.summary}`;
+  const [editedStorySummaries, setEditedStorySummaries] = useState<Record<string, string>>({});
+  const [editedIds, setEditedIds] = useState<Record<string, string>>({});
+  // Epic adı satır bazlı değil GRUP bazlı saklanır (özgün epic adı anahtar).
+  // Böylece birleştirilmiş hücre düzenlendiğinde gruptaki tüm satırlar birlikte güncellenir
+  // ve gruplama bozulmaz.
+  const [editedEpicNames, setEditedEpicNames] = useState<Record<string, string>>({});
 
   // Bug satırında gösterilecek açıklama. Ekran ve mail çıktısı bu tek kaynaktan beslenir
   // ki ikisi arasında fark oluşmasın.
   const getBugSummary = (task: JiraTask): string => {
-    const edited = editedBugSummaries[bugRowKey(task)];
+    const edited = editedBugSummaries[taskKey(task)];
     if (edited !== undefined) return edited;
 
     // Bug'ın CCRSP'si varsa, başlık olarak CCRSP'nin kendi özeti kullanılır (PRD Kural B.1).
@@ -227,6 +357,29 @@ const App: React.FC = () => {
     }
     return task.summary;
   };
+
+  const getStorySummary = (task: JiraTask): string =>
+    editedStorySummaries[taskKey(task)] ?? task.summary;
+
+  const getEpicName = (task: JiraTask): string =>
+    editedEpicNames[task.epicName] ?? task.epicName;
+
+  // --- MÜŞTERİYE GİDEN ID ---
+  // Müşterinin ISCEPEXTRC / ISCOREXT kayıtlarına erişimi YOK; bu yüzden rapora
+  // yalnızca CCRSP numarası yazılır. CCRSP kendi üstünde yoksa bağlı kayıttan
+  // çözümlenir (bkz. services/ccrspResolver.ts). Hiçbiri yoksa '-' konur.
+  // (Ekranın altındaki iç "Tarih Bazlı Filtrele" tablosunda tam ID görünmeye devam eder.)
+  const getReportId = (task: JiraTask): string => {
+    const edited = editedIds[taskKey(task)];
+    if (edited !== undefined) return edited.trim() || '-';
+    return resolveCcrsp(task, tasks);
+  };
+
+  // Jira bilet numarası biçiminde mi? (Link üretmek için)
+  const isJiraKey = (s: string): boolean => /^[A-Z][A-Z0-9]+-\d+$/i.test(s.trim());
+
+  const hideRow = (task: JiraTask) =>
+    setHiddenRowKeys(prev => ({ ...prev, [taskKey(task)]: true }));
 
   // Mail HTML'ine gömülecek metinlerde <, >, & karakterlerini kaçır.
   // Aksi halde başlığında "<" geçen bir Jira kaydı mail tablosunu bozuyordu.
@@ -329,7 +482,14 @@ const App: React.FC = () => {
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
+    // html2canvas ekranı olduğu gibi resme çevirir ve @media print kurallarını UYGULAMAZ;
+    // bu yüzden satır silme (×) butonlarını sınıf ekleyerek doğrudan gizliyoruz.
+    // React state'i beklemek yerine DOM'a anında yazıyoruz ki render gecikmesi sorun çıkarmasın.
+    element.classList.add('pdf-mode');
+    const endPdfMode = () => element.classList.remove('pdf-mode');
+
     const timeoutId = setTimeout(() => {
+      endPdfMode();
       setIsGeneratingPDF(false);
       setSuccessMessage(null);
       setError('PDF oluşturma işlemi zaman aşımına uğradı. Lütfen sayfayı yenileyip tekrar deneyin.');
@@ -341,12 +501,14 @@ const App: React.FC = () => {
       .save()
       .then(() => {
         clearTimeout(timeoutId);
+        endPdfMode();
         setIsGeneratingPDF(false);
         setSuccessMessage('PDF başarıyla indirildi!');
         setTimeout(() => setSuccessMessage(null), 3000);
       })
       .catch((err: any) => {
         clearTimeout(timeoutId);
+        endPdfMode();
         setIsGeneratingPDF(false);
         console.error('PDF generation error:', err);
         setError('PDF oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.');
@@ -411,16 +573,24 @@ const App: React.FC = () => {
       const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(t.statusCategoryChanged) <= filterCutoffTimestamp;
       const textStyle = isGrayedOut ? 'color: #334155; font-style: italic;' : 'color: #000000;';
       const cellBg = isGrayedOut ? 'background-color: #cbd5e1;' : 'background-color: #ffffff;';
-      let epicCell = rowSpan > 0 ? `<td rowspan="${rowSpan}" style="${borderStyle} vertical-align: middle; ${isGrayedOut ? 'color: #334155; font-style: italic; background-color: #cbd5e1;' : 'color: #000000; background-color: #ffffff;'}">${escapeHtml(t.epicName)}</td>` : '';
-      const displayId = t.backlogId !== '-' ? t.backlogId : (t.externalRcId !== '-' ? t.externalRcId : '-');
-      const idCellContent = displayId !== '-' ? `<a href="https://commencis.atlassian.net/browse/${displayId}" style="color: ${isGrayedOut ? '#334155' : 'blue'}; text-decoration: underline;">${displayId}</a>` : displayId;
-      storyRows += `<tr><td style="${borderStyleNoWrap} ${textStyle} ${cellBg}">${idCellContent}</td>${epicCell}<td style="${borderStyle} ${textStyle} ${cellBg}">${escapeHtml(t.summary)}</td></tr>`;
+      let epicCell = rowSpan > 0 ? `<td rowspan="${rowSpan}" style="${borderStyle} vertical-align: middle; ${isGrayedOut ? 'color: #334155; font-style: italic; background-color: #cbd5e1;' : 'color: #000000; background-color: #ffffff;'}">${escapeHtml(getEpicName(t))}</td>` : '';
+      const displayId = getReportId(t);
+      const idCellContent = displayId !== '-'
+        ? (isJiraKey(displayId)
+            ? `<a href="https://commencis.atlassian.net/browse/${encodeURIComponent(displayId)}" style="color: ${isGrayedOut ? '#334155' : 'blue'}; text-decoration: underline;">${escapeHtml(displayId)}</a>`
+            : escapeHtml(displayId))
+        : displayId;
+      storyRows += `<tr><td style="${borderStyleNoWrap} ${textStyle} ${cellBg}">${idCellContent}</td>${epicCell}<td style="${borderStyle} ${textStyle} ${cellBg}">${escapeHtml(getStorySummary(t))}</td></tr>`;
     }
 
     let bugRows = bugTasks.length > 0 ? bugTasks.map((t) => {
       const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(t.statusCategoryChanged) <= filterCutoffTimestamp;
-      const defectId = t.backlogId !== '-' ? t.backlogId : (t.externalRcId !== '-' ? t.externalRcId : '-');
-      const idContent = defectId !== '-' ? `<a href="https://commencis.atlassian.net/browse/${defectId}" style="color: ${isGrayedOut ? '#334155' : 'blue'}; text-decoration: underline;">${defectId}</a>` : defectId;
+      const defectId = getReportId(t);
+      const idContent = defectId !== '-'
+        ? (isJiraKey(defectId)
+            ? `<a href="https://commencis.atlassian.net/browse/${encodeURIComponent(defectId)}" style="color: ${isGrayedOut ? '#334155' : 'blue'}; text-decoration: underline;">${escapeHtml(defectId)}</a>`
+            : escapeHtml(defectId))
+        : defectId;
 
       const summary = escapeHtml(getBugSummary(t));
       return `<tr><td style="${borderStyleNoWrap} ${isGrayedOut ? 'background-color: #cbd5e1; font-style: italic;' : 'background-color: #ffffff;'}">${idContent}</td><td style="${borderStyle} ${isGrayedOut ? 'background-color: #cbd5e1; font-style: italic;' : 'background-color: #ffffff;'} word-wrap: break-word; white-space: pre-wrap;">${summary}</td></tr>`;
@@ -691,6 +861,27 @@ const App: React.FC = () => {
               </div>
             )}
 
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-600 text-sm no-print max-w-[794px] mx-auto flex items-start gap-3">
+              <Info className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+              <span>
+                Tablodaki <strong>ID, Epic ve Açıklama</strong> alanlarına tıklayıp doğrudan düzenleyebilirsin.
+                Satır sonundaki <strong>×</strong> düğmesi o kaydı rapordan çıkarır. Yaptığın değişiklikler
+                mail ve PDF çıktısına aynen yansır.
+              </span>
+            </div>
+
+            {hiddenRowCount > 0 && (
+              <div className="bg-slate-100 p-3 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium no-print max-w-[794px] mx-auto flex items-center justify-between gap-4">
+                <span>{hiddenRowCount} kayıt rapordan çıkarıldı.</span>
+                <button
+                  onClick={() => setHiddenRowKeys({})}
+                  className="text-blue-700 hover:text-blue-900 underline font-semibold shrink-0"
+                >
+                  Tümünü geri al
+                </button>
+              </div>
+            )}
+
             {/* Rapor ekranındayken oluşan hatalar (PDF/pano) eskiden hiç gösterilmiyordu. */}
             {error && (
               <div className="bg-red-50 p-4 rounded-lg border border-red-200 text-red-800 font-medium no-print max-w-[794px] mx-auto flex items-start justify-between gap-4">
@@ -839,14 +1030,40 @@ const App: React.FC = () => {
                     {storyTasks.map((task, idx) => {
                       const rowSpan = getEpicRowSpan(idx);
                       const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(task.statusCategoryChanged) <= filterCutoffTimestamp;
-                      const displayId = task.backlogId !== '-' ? task.backlogId : (task.externalRcId !== '-' ? task.externalRcId : '-');
+                      const rowKey = taskKey(task);
+                      const cellCls = isGrayedOut ? 'bg-slate-300' : 'bg-white';
+                      const cellStyle = { fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit' } as React.CSSProperties;
                       return (
-                        <tr key={idx}>
-                          <td className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit', whiteSpace: 'nowrap' }}>
-                            {displayId !== '-' ? <a href={`https://commencis.atlassian.net/browse/${displayId}`} target="_blank" rel="noreferrer" style={{ color: isGrayedOut ? '#334155' : 'blue', textDecoration: 'underline' }}>{displayId}</a> : displayId}
+                        <tr key={rowKey}>
+                          <td className={cellCls} style={{ ...cellStyle, padding: 0, whiteSpace: 'nowrap' }}>
+                            <EditableCell
+                              value={getReportId(task)}
+                              onChange={v => setEditedIds(prev => ({ ...prev, [rowKey]: v }))}
+                              title="Backlog ID'yi düzenlemek için tıklayın"
+                              singleLine
+                              linkColor={isGrayedOut ? '#334155' : 'blue'}
+                              isLink={isJiraKey(getReportId(task))}
+                            />
                           </td>
-                          {rowSpan > 0 && <td rowSpan={rowSpan} className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ verticalAlign: 'middle', fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit' }}>{task.epicName}</td>}
-                          <td className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit' }}>{task.summary}</td>
+                          {rowSpan > 0 && (
+                            <td rowSpan={rowSpan} className={cellCls} style={{ ...cellStyle, verticalAlign: 'middle', padding: 0 }}>
+                              <EditableCell
+                                value={getEpicName(task)}
+                                onChange={v => setEditedEpicNames(prev => ({ ...prev, [task.epicName]: v }))}
+                                title="Epic adını düzenlemek için tıklayın (gruptaki tüm satırlar güncellenir)"
+                              />
+                            </td>
+                          )}
+                          <td className={cellCls} style={{ ...cellStyle, padding: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+                              <EditableCell
+                                value={getStorySummary(task)}
+                                onChange={v => setEditedStorySummaries(prev => ({ ...prev, [rowKey]: v }))}
+                                title="Açıklamayı düzenlemek için tıklayın"
+                              />
+                              <RowDeleteButton onClick={() => hideRow(task)} />
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
@@ -857,58 +1074,33 @@ const App: React.FC = () => {
                   <colgroup><col style={{ width: '18%' }} /><col style={{ width: '82%' }} /></colgroup>
                   <thead><tr><td colSpan={2} className="header-blue text-center">Tamamlanan Kayıtlar</td></tr><tr className="bg-gray"><td className="font-bold">Defect ID</td><td className="font-bold">Açıklama</td></tr></thead>
                   <tbody>
-                    {bugTasks.length > 0 ? bugTasks.map((task, idx) => {
+                    {bugTasks.length > 0 ? bugTasks.map((task) => {
                       const isGrayedOut = filterCutoffTimestamp !== null && parseJiraDate(task.statusCategoryChanged) <= filterCutoffTimestamp;
-                      const defectId = task.backlogId !== '-' ? task.backlogId : (task.externalRcId !== '-' ? task.externalRcId : '-');
-                      const rowKey = bugRowKey(task);
+                      const rowKey = taskKey(task);
+                      const cellCls = isGrayedOut ? 'bg-slate-300' : 'bg-white';
+                      const cellStyle = { fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit' } as React.CSSProperties;
 
                       return (
-                        <tr key={idx}>
-                          <td className={isGrayedOut ? "bg-slate-300" : "bg-white"} style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit', whiteSpace: 'nowrap' }}>
-                            {defectId !== '-' ? <a href={`https://commencis.atlassian.net/browse/${defectId}`} target="_blank" rel="noreferrer" style={{ color: isGrayedOut ? '#334155' : 'blue', textDecoration: 'underline' }}>{defectId}</a> : defectId}
-                          </td>
-                          <td
-                            className={isGrayedOut ? "bg-slate-300" : "bg-white"}
-                            style={{ fontStyle: isGrayedOut ? 'italic' : 'normal', color: isGrayedOut ? '#334155' : 'inherit', padding: 0 }}
-                          >
-                            <textarea
-                              value={getBugSummary(task)}
-                              onChange={e => {
-                                setEditedBugSummaries(prev => ({ ...prev, [rowKey]: e.target.value }));
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                              }}
-                              onFocus={e => {
-                                e.currentTarget.style.boxShadow = 'inset 0 -2px 0 0 #2563eb';
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                              }}
-                              onBlur={e => (e.currentTarget.style.boxShadow = 'none')}
-                              rows={1}
-                              style={{
-                                width: '100%',
-                                border: 'none',
-                                outline: 'none',
-                                background: 'transparent',
-                                fontFamily: 'inherit',
-                                fontSize: 'inherit',
-                                color: 'inherit',
-                                fontStyle: 'inherit',
-                                padding: '4px 8px',
-                                cursor: 'text',
-                                boxSizing: 'border-box',
-                                resize: 'none',
-                                overflow: 'hidden',
-                                minHeight: '30px',
-                                lineHeight: '1.5'
-                              }}
-                              ref={(el) => {
-                                if (el) {
-                                  el.style.height = 'auto';
-                                  el.style.height = el.scrollHeight + 'px';
-                                }
-                              }}
+                        <tr key={rowKey}>
+                          <td className={cellCls} style={{ ...cellStyle, padding: 0, whiteSpace: 'nowrap' }}>
+                            <EditableCell
+                              value={getReportId(task)}
+                              onChange={v => setEditedIds(prev => ({ ...prev, [rowKey]: v }))}
+                              title="Defect ID'yi düzenlemek için tıklayın"
+                              singleLine
+                              linkColor={isGrayedOut ? '#334155' : 'blue'}
+                              isLink={isJiraKey(getReportId(task))}
                             />
+                          </td>
+                          <td className={cellCls} style={{ ...cellStyle, padding: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+                              <EditableCell
+                                value={getBugSummary(task)}
+                                onChange={v => setEditedBugSummaries(prev => ({ ...prev, [rowKey]: v }))}
+                                title="Açıklamayı düzenlemek için tıklayın"
+                              />
+                              <RowDeleteButton onClick={() => hideRow(task)} />
+                            </div>
                           </td>
                         </tr>
                       );
@@ -977,6 +1169,8 @@ const App: React.FC = () => {
                     <thead><tr className="bg-slate-100"><th className="p-2 border text-left">ID</th><th className="p-2 border text-left">Summary</th><th className="p-2 border text-left">Tarih</th></tr></thead>
                     <tbody>
                       {historyViewTasks.map((t, idx) => {
+                        // Bu tablo yalnızca ekipte kullanılır (mail/PDF çıktısına girmez),
+                        // bu yüzden kaydı teşhis etmeye yardımcı olan tam ID (ISCEPEXTRC dahil) gösterilir.
                         const displayId = t.backlogId !== '-' ? t.backlogId : (t.externalRcId !== '-' ? t.externalRcId : '-');
                         const isCurrentFilter = filterCutoffTimestamp === parseJiraDate(t.statusCategoryChanged);
                         return (

@@ -12,6 +12,9 @@ export interface JiraTask {
   externalRcId: string; // New field for ISCEPEXTRC-xxxx
   releaseNotes: string; // Release Notes field from Jira
   ccrspSummaryHint?: string; // If 'relates to' cell provides "CCRSP-1234 Summary Text", store "Summary Text" here
+  linkedKeys?: string[]; // Bu kayda bağlı diğer bilet numaraları (ISCEPANDROID-123, CCRSP-456 ...).
+                         // Kendi üstünde CCRSP olmayan hataların, bağlı olduğu kayıt üzerinden
+                         // CCRSP'ye ulaşabilmesi için tutulur.
 }
 
 export interface ReportConfig {

@@ -77,6 +77,20 @@ export const parseJiraExcel = async (file: File): Promise<JiraTask[]> => {
             .map(k => String(row[k]).toLowerCase())
             .join(' ');
 
+          // Bağlı bilet numaraları — Jira CSV export'u bağlantıları
+          // "Inward issue link (Relates)", "Outward issue link (Cloners)" gibi
+          // ayrı kolonlara böler. Yalnızca bu kolonlar taranır.
+          const linkedKeys = Array.from(
+            new Set(
+              Object.keys(row)
+                .filter(k => /link|bağlı|bagli/i.test(k))
+                .map(k => String(row[k]))
+                .join(' ')
+                .match(/[A-Z][A-Z0-9]+-\d+/gi)
+                ?.map(s => s.toUpperCase()) || []
+            )
+          );
+
           let parsedIssueType = issueType;
           if (parsedIssueType.toLowerCase() !== 'bug') {
             if (
@@ -110,6 +124,7 @@ export const parseJiraExcel = async (file: File): Promise<JiraTask[]> => {
             issueType: parsedIssueType,
             externalRcId: externalRcId,
             ccrspSummaryHint: ccrspSummaryHint,
+            linkedKeys: linkedKeys,
             releaseNotes: (() => {
             const key = Object.keys(row).find(k =>
               k.toLowerCase().includes('release') ||

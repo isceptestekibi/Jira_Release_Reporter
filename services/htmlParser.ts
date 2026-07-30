@@ -137,6 +137,18 @@ export const parseJiraHtml = async (file: File): Promise<JiraTask[]> => {
       }
     }
 
+    // 2b. Bağlı bilet numaraları (Linked issues hücresi)
+    // Kendi üstünde CCRSP olmayan bir hatanın, bağlı olduğu kayıt üzerinden CCRSP'ye
+    // ulaşabilmesi için saklanır. Yalnızca link hücresi taranır; özet metnindeki
+    // benzer ifadelerin yanlışlıkla bilet sayılmaması için satırın tamamı taranmaz.
+    const linkCellText =
+      getText('issuelinks') ||
+      getByIndex(headers.findIndex(h => /link|bağlı|bagli/i.test(h.textContent || ''))) ||
+      '';
+    const linkedKeys = Array.from(
+      new Set((linkCellText.match(/[A-Z][A-Z0-9]+-\d+/gi) || []).map(s => s.toUpperCase()))
+    );
+
     // 3. Summary
     const summary = getText('summary') || getByIndex(headers.findIndex(h => h.textContent?.toLowerCase().includes('summary') || h.textContent?.toLowerCase().includes('özet'))) || 'N/A';
 
@@ -172,6 +184,7 @@ export const parseJiraHtml = async (file: File): Promise<JiraTask[]> => {
       issueType,
       externalRcId,
       ccrspSummaryHint,
+      linkedKeys,
       releaseNotes: getInnerHtml('customfield_10082') || (releaseNotesIndex !== -1 ? getHtmlByIndex(releaseNotesIndex) : '')
     };
   });

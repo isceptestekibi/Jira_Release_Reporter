@@ -68,6 +68,12 @@ body {
     text-decoration: underline !important;
 }
 
+/* PDF üretimi sırasında (html2pdf/html2canvas) satır silme düğmeleri gizlenir.
+   html2canvas @media print kurallarını uygulamadığı için ayrı bir sınıf gerekiyor. */
+#pdf-root.pdf-mode .row-delete {
+    display: none !important;
+}
+
 @media print {
     body {
         background: white;
